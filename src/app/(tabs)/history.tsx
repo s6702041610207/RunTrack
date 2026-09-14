@@ -6,6 +6,7 @@ import {
   Modal,
   Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   View,
@@ -21,12 +22,14 @@ import { usePawTrackColorScheme } from "@/hooks/use-theme-preference";
 import { deleteRun } from "@/lib/runs-api";
 import {
   ACTIVITY_META,
+  computeSplits,
   formatDistance,
   formatDuration,
   formatElevation,
   formatPace,
   regionForPath,
   Run,
+  Split,
   summarizeRuns,
 } from "@/utils/geo";
 
@@ -233,6 +236,8 @@ function RunDetail({
   onClose: () => void;
   onDelete: () => void;
 }) {
+  const splits = useMemo(() => computeSplits(run.path), [run.path]);
+
   return (
     <View style={[styles.detailContainer, { backgroundColor: colors.background }]}>
       <View style={[styles.detailHeader, { paddingTop: insetsTop + 12 }]}>
@@ -254,6 +259,8 @@ function RunDetail({
         <Stat label="เพซเฉลี่ย" value={formatPace(run.distanceMeters, run.durationSeconds)} colors={colors} />
         <Stat label="ความสูงสะสม" value={formatElevation(run.elevationGainMeters)} colors={colors} />
       </View>
+
+      {splits.length > 0 && <SplitsRow splits={splits} colors={colors} />}
 
       <Pressable
         onPress={onDelete}
@@ -282,6 +289,54 @@ function Stat({ label, value, colors }: { label: string; value: string; colors: 
         {value}
       </Text>
       <Text style={[styles.statLabel, { color: colors.textSecondary }]}>{label}</Text>
+    </View>
+  );
+}
+
+function SplitsRow({ splits, colors }: { splits: Split[]; colors: PawTrackPalette }) {
+  // หา split เต็มกิโลที่เร็วที่สุด ไว้ไฮไลต์ (ไม่เอา split เศษสุดท้ายมาเทียบ เพราะระยะไม่เท่ากัน เทียบกันไม่แฟร์)
+  const fastestFullSplit = splits
+    .filter((s) => !s.isPartial)
+    .reduce<Split | null>((fastest, s) => {
+      if (!fastest) return s;
+      return s.durationSeconds < fastest.durationSeconds ? s : fastest;
+    }, null);
+
+  return (
+    <View style={styles.splitsSection}>
+      <Text style={[styles.splitsTitle, { color: colors.textSecondary }]}>Split เวลาต่อกิโล</Text>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.splitsRow}>
+        {splits.map((split) => {
+          const isFastest = fastestFullSplit !== null && split === fastestFullSplit;
+          return (
+            <View
+              key={split.index}
+              style={[
+                styles.splitChip,
+                {
+                  backgroundColor: isFastest ? colors.petSoft : colors.surface,
+                  borderColor: isFastest ? colors.pet : colors.border,
+                },
+              ]}
+            >
+              <Text style={[styles.splitChipLabel, { color: colors.textSecondary }]}>
+                {split.isPartial ? `กม. ${split.index} (เศษ)` : `กม. ${split.index}`}
+              </Text>
+              <Text style={[styles.splitChipValue, { color: isFastest ? colors.pet : colors.textPrimary }]}>
+                {formatDuration(split.durationSeconds)}
+              </Text>
+              {split.isPartial && (
+                <Text style={[styles.splitChipSub, { color: colors.textSecondary }]}>
+                  {formatDistance(split.distanceMeters)}
+                </Text>
+              )}
+              {isFastest && (
+                <Ionicons name="flash" size={12} color={colors.pet} style={styles.splitChipIcon} />
+              )}
+            </View>
+          );
+        })}
+      </ScrollView>
     </View>
   );
 }
@@ -391,6 +446,46 @@ const styles = StyleSheet.create({
   },
   statLabel: {
     fontSize: 11,
+  },
+  splitsSection: {
+    marginBottom: 16,
+  },
+  splitsTitle: {
+    fontSize: 12,
+    fontWeight: "600",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+    marginBottom: 10,
+    marginHorizontal: 20,
+  },
+  splitsRow: {
+    paddingHorizontal: 20,
+    gap: 10,
+  },
+  splitChip: {
+    alignItems: "center",
+    gap: 4,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    minWidth: 76,
+  },
+  splitChipLabel: {
+    fontSize: 11,
+    fontWeight: "600",
+  },
+  splitChipValue: {
+    fontSize: 15,
+    fontWeight: "700",
+  },
+  splitChipSub: {
+    fontSize: 10,
+  },
+  splitChipIcon: {
+    position: "absolute",
+    top: 6,
+    right: 6,
   },
   deleteButton: {
     flexDirection: "row",

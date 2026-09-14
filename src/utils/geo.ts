@@ -92,6 +92,64 @@ export function formatElevation(meters: number): string {
   return `+${Math.round(meters)} ม.`;
 }
 
+export type Split = {
+  index: number; // ลำดับ split เริ่มจาก 1
+  distanceMeters: number; // 1000 สำหรับ split เต็มกิโล, น้อยกว่านั้นสำหรับ split สุดท้าย (เศษ)
+  durationSeconds: number;
+  isPartial: boolean;
+};
+
+const SPLIT_DISTANCE_METERS = 1000;
+// เศษระยะที่เหลือต้องมากกว่านี้ถึงจะโชว์เป็น split สุดท้าย — กันโชว์แถวที่แทบไม่มีความหมาย (เช่น เหลือ 3 เมตร)
+const MIN_PARTIAL_SPLIT_METERS = 50;
+
+// แบ่งเวลาที่ใช้ต่อกิโลเมตร (split time) จาก path ที่มีอยู่แล้ว — คำนวณฝั่ง client ล้วนๆ
+// ไม่ต้องเก็บ field เพิ่มใน Firestore เพราะคำนวณใหม่ได้จาก path ทุกครั้งที่เปิดดู
+export function computeSplits(path: RunPoint[]): Split[] {
+  if (path.length < 2) return [];
+
+  const splits: Split[] = [];
+  let cumulativeDistance = 0;
+  let nextBoundary = SPLIT_DISTANCE_METERS;
+  let lastSplitTimestamp = path[0].timestamp;
+
+  for (let i = 1; i < path.length; i++) {
+    const segment = haversineDistance(path[i - 1], path[i]);
+    const segmentStartDistance = cumulativeDistance;
+    cumulativeDistance += segment;
+
+    // จุดเดียวอาจพาข้ามหลายหลักกิโลพร้อมกันได้ (เช่น GPS update ห่างกันนาน) เลยต้อง while ไม่ใช่ if
+    while (cumulativeDistance >= nextBoundary) {
+      const distanceIntoSegment = nextBoundary - segmentStartDistance;
+      const fraction = segment > 0 ? distanceIntoSegment / segment : 0;
+      const splitTimestamp = path[i - 1].timestamp + fraction * (path[i].timestamp - path[i - 1].timestamp);
+
+      splits.push({
+        index: splits.length + 1,
+        distanceMeters: SPLIT_DISTANCE_METERS,
+        durationSeconds: (splitTimestamp - lastSplitTimestamp) / 1000,
+        isPartial: false,
+      });
+
+      lastSplitTimestamp = splitTimestamp;
+      nextBoundary += SPLIT_DISTANCE_METERS;
+    }
+  }
+
+  const remainingDistance = cumulativeDistance - (nextBoundary - SPLIT_DISTANCE_METERS);
+  if (remainingDistance > MIN_PARTIAL_SPLIT_METERS) {
+    const lastPoint = path[path.length - 1];
+    splits.push({
+      index: splits.length + 1,
+      distanceMeters: remainingDistance,
+      durationSeconds: (lastPoint.timestamp - lastSplitTimestamp) / 1000,
+      isPartial: true,
+    });
+  }
+
+  return splits;
+}
+
 function startOfWeek(date: Date): Date {
   // เริ่มสัปดาห์ที่วันจันทร์ (แบบไทย/สากลทั่วไป ไม่ใช่วันอาทิตย์แบบสหรัฐฯ)
   const d = new Date(date);
