@@ -7,9 +7,10 @@ import { ActivityType, haversineDistance, Run, RunPoint } from "@/utils/geo";
 
 export type RunStatus = "idle" | "running" | "paused";
 
-// ระยะขั้นต่ำต่อช่วง (เมตร) ที่จะนับเข้าระยะทางรวม — กันสัญญาณ GPS กระตุกตอนยืนนิ่ง
+// ระยะขั้นต่ำต่อช่วง (เมตร) ที่จะนับเข้าระยะทางรวม — กันสัญญาณ GPS/WiFi กระตุกตอนยืนนิ่ง
 // ทำให้ระยะทางเพิ่มขึ้นเองทั้งที่ไม่ได้ขยับ (ใช้ค่าเดียวกันเป็นเกณฑ์ตรวจจับ "กำลังเคลื่อนที่" ของ auto-pause ด้วย)
-const MIN_SEGMENT_DISTANCE = 2;
+// ตั้งไว้สูงกว่า GPS มือถือทั่วไปเผื่อรันบนเว็บ/คอมที่ไม่มีชิป GPS จริง (ใช้ WiFi/IP หาตำแหน่ง ความแม่นยำหยาบกว่ามาก)
+const MIN_SEGMENT_DISTANCE = 5;
 
 // ความสูงที่เพิ่มขึ้นต้องเกินเท่านี้ (เมตร) ถึงจะนับเป็น elevation gain จริง — GPS altitude แกว่งง่ายกว่าพิกัดแนวราบมาก
 const MIN_ELEVATION_STEP = 1;
@@ -119,10 +120,15 @@ export default function useRunTracker() {
           return prev;
         }
 
-        if (segment > MIN_SEGMENT_DISTANCE) {
-          setDistanceMeters((d) => d + segment);
-          lastMovementAtRef.current = Date.now();
+        // ขยับไม่ถึงเกณฑ์ — ถือว่ายังยืนอยู่ที่เดิม "ทิ้ง" จุดนี้ไปเลย ไม่เอามาเป็นจุดอ้างอิงใหม่
+        // (ถ้าเอามาอ้างอิงต่อ สัญญาณ GPS/WiFi ที่แกว่งไปมาเรื่อยๆ รอบจุดเดิม จะค่อยๆ "เดินสุ่ม" สะสม
+        // ระยะทางทีละนิดได้ทั้งที่ไม่ได้ขยับจริง โดยเฉพาะบนเว็บ/คอมที่ไม่มีชิป GPS จริง ความแม่นยำหยาบกว่ามือถือมาก)
+        if (segment <= MIN_SEGMENT_DISTANCE) {
+          return prev;
         }
+
+        setDistanceMeters((d) => d + segment);
+        lastMovementAtRef.current = Date.now();
 
         if (typeof last.altitude === "number" && typeof point.altitude === "number") {
           const gain = point.altitude - last.altitude;
