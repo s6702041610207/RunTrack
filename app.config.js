@@ -65,6 +65,9 @@ module.exports = {
     ],
     experiments: {
       typedRoutes: true,
+      // GitHub Pages เสิร์ฟที่ /RunTrack/ ไม่ใช่ root domain — asset ทุกตัวต้องมี prefix นี้
+      // ตั้งผ่าน env var EXPO_BASE_URL (set เฉพาะตอน build ใน GitHub Actions) กันไม่ให้กระทบตอน dev ในเครื่อง
+      baseUrl: process.env.EXPO_BASE_URL ?? "",
     },
   },
 };
