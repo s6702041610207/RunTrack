@@ -69,5 +69,11 @@ module.exports = {
       // ตั้งผ่าน env var EXPO_BASE_URL (set เฉพาะตอน build ใน GitHub Actions) กันไม่ให้กระทบตอน dev ในเครื่อง
       baseUrl: process.env.EXPO_BASE_URL ?? "",
     },
+    extra: {
+      eas: {
+        projectId: "c9426ea0-d8b3-4e23-8b86-6bce34ca76c7",
+      },
+    },
+    owner: "sitarin",
   },
 };
